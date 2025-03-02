@@ -54,6 +54,7 @@ contract MakePayments is Script, StdAssertions {
 
         console.log("Please approve this dataHash on one of the parent safes");
         console.logBytes32(dataHash);
+        console.logBytes(abi.encodeCall(ISafe.approveHash, (dataHash)));
 
         // Comment out when running for real
         vm.prank(address(accounting));
