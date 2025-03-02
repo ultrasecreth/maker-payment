@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.4;
 
-import {Script} from "forge-std/Script.sol";
-import {StdAssertions} from "forge-std/StdAssertions.sol";
+import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -10,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ISafe} from "../src/dependencies/ISafe.sol";
 import {Enum} from "../src/dependencies/Enum.sol";
 
-contract MakePayments is Script, StdAssertions {
+contract PaymentTest is Test {
     ISafe launch = ISafe(0x3C5142F28567E6a0F172fd0BaaF1f2847f49D02F);
     ISafe integration = ISafe(0xD6891d1DFFDA6B0B1aF3524018a1eE2E608785F7);
 
@@ -25,7 +24,11 @@ contract MakePayments is Script, StdAssertions {
 
     address recipient = makeAddr("recipient");
 
-    function run() public {
+    function setUp() public {
+        vm.createSelectFork(vm.envString("MAINNET_URL"));
+    }
+
+    function test_makePayment() public {
         uint256 nonce = launch.nonce();
         bytes32 dataHash = launch.getTransactionHash({
             to: address(usds),
