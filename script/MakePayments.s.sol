@@ -9,6 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ISafe} from "../src/dependencies/ISafe.sol";
 import {Enum} from "../src/dependencies/Enum.sol";
+import {IMultiSend} from "../src/dependencies/IMultiSend.sol";
 
 contract MakePayments is Script, StdAssertions {
     ISafe launch = ISafe(0x3C5142F28567E6a0F172fd0BaaF1f2847f49D02F);
@@ -23,15 +24,23 @@ contract MakePayments is Script, StdAssertions {
     IERC20 usds = IERC20(0xdC035D45d973E3EC169d2276DDab16f1e407384F);
     IERC20 sky = IERC20(0x56072C95FAA701256059aa122697B133aDEd9279);
 
-    address recipient = makeAddr("recipient");
+    struct Payment {
+        address token;
+        address recipient;
+        uint256 amount;
+    }
+
+    Payment[] payments;
 
     function run() public {
+        (address to, bytes memory data) = encodeMultiSend();
+
         uint256 nonce = launch.nonce();
         bytes32 dataHash = launch.getTransactionHash({
-            to: address(usds),
+            to: to,
             value: 0,
-            data: abi.encodeWithSelector(IERC20.transfer.selector, recipient, 100e18),
-            operation: Enum.Operation.Call,
+            data: data,
+            operation: Enum.Operation.DelegateCall,
             safeTxGas: 0,
             baseGas: 0,
             gasPrice: 0,
@@ -40,19 +49,20 @@ contract MakePayments is Script, StdAssertions {
             _nonce: nonce
         });
 
-        // vm.prank(address(ecoInspector));
-        // launch.approveHash(dataHash);
+        console.log("Please approve this dataHash");
+        console.logBytes32(dataHash);
 
+        // Comment out when running for real
         vm.prank(address(accounting));
         launch.approveHash(dataHash);
 
         bytes memory launchCall = abi.encodeCall(
             ISafe.execTransaction,
             (
-                address(usds),
+                to,
                 0,
-                abi.encodeWithSelector(IERC20.transfer.selector, recipient, 100e18),
-                Enum.Operation.Call,
+                data,
+                Enum.Operation.DelegateCall,
                 0,
                 0,
                 0,
@@ -70,6 +80,7 @@ contract MakePayments is Script, StdAssertions {
         );
 
         vm.prank(address(retro));
+        // vm.broadcast();
         ecoInspector.execTransaction({
             to: address(launch),
             value: 0,
@@ -83,6 +94,36 @@ contract MakePayments is Script, StdAssertions {
             signatures: abi.encodePacked(bytes32(uint256(uint160(address(retro)))), bytes32(""), uint8(1))
         });
 
-        assertEqDecimal(usds.balanceOf(recipient), 100e18, 18);
+        for (uint256 i = 0; i < payments.length; i++) {
+            assertGe(IERC20(payments[i].token).balanceOf(payments[i].recipient), payments[i].amount);
+        }
+    }
+
+    function _readCSV(string memory path) internal {
+        string memory line = vm.readLine(path);
+        while (bytes(line).length > 0) {
+            string[] memory values = vm.split(line, ",");
+            payments.push(
+                Payment({
+                    token: vm.parseAddress(values[1]),
+                    recipient: vm.parseAddress(values[2]),
+                    amount: vm.parseUint(string.concat(values[3], " ether"))
+                })
+            );
+            line = vm.readLine(path);
+        }
+        vm.closeFile(path);
+    }
+
+    function encodeMultiSend() internal returns (address to, bytes memory data) {
+        _readCSV("payments.csv");
+
+        for (uint256 i = 0; i < payments.length; i++) {
+            bytes memory call = abi.encodeCall(IERC20.transfer, (payments[i].recipient, payments[i].amount));
+
+            data =
+                abi.encodePacked(data, Enum.Operation.Call, address(payments[i].token), uint256(0), call.length, call);
+        }
+        return (0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761, abi.encodeCall(IMultiSend.multiSend, (data)));
     }
 }
