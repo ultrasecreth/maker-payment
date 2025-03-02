@@ -82,6 +82,10 @@ contract MakePayments is Script, StdAssertions {
             )
         );
 
+        console.log("");
+        console.log("Please execute this call on the other parent safe");
+        console.logBytes(launchCall);
+
         bytes memory parentCall = abi.encodeCall(
             ISafe.execTransaction,
             (
@@ -97,11 +101,6 @@ contract MakePayments is Script, StdAssertions {
                 abi.encodePacked(bytes32(uint256(uint160(address(retro)))), bytes32(""), uint8(1))
             )
         );
-
-        console.log("");
-
-        console.log("Please execute this call on the other parent safe");
-        console.logBytes(parentCall);
 
         vm.prank(address(retro));
         // vm.broadcast();
