@@ -40,47 +40,49 @@ contract MakePayments is Script, StdAssertions {
             _nonce: nonce
         });
 
-        console.logBytes32(keccak256(encodeMessageDataForSafe(launch, abi.encode(dataHash))));
-
-        vm.prank(address(retro));
-        ecoInspector.approveHash(dataHash);
-
-        vm.prank(address(ketcher));
-        accounting.approveHash(dataHash);
-
         // vm.prank(address(ecoInspector));
+        // launch.approveHash(dataHash);
 
-        bytes memory signatures = abi.encodePacked(
-            bytes32(uint256(uint160(address(ecoInspector)))),
-            bytes32(uint256(65 * 2)),
-            uint8(0),
-            bytes32(uint256(uint160(address(accounting)))),
-            bytes32(uint256(65 * 2)),
-            uint8(0),
-            bytes32(0)
+        vm.prank(address(accounting));
+        launch.approveHash(dataHash);
+
+        bytes memory launchCall = abi.encodeCall(
+            ISafe.execTransaction,
+            (
+                address(usds),
+                0,
+                abi.encodeWithSelector(IERC20.transfer.selector, recipient, 100e18),
+                Enum.Operation.Call,
+                0,
+                0,
+                0,
+                address(0),
+                payable(address(0)),
+                abi.encodePacked(
+                    bytes32(uint256(uint160(address(ecoInspector)))),
+                    bytes32(""),
+                    uint8(1),
+                    bytes32(uint256(uint160(address(accounting)))),
+                    bytes32(""),
+                    uint8(1)
+                )
+            )
         );
 
-        launch.execTransaction({
-            to: address(usds),
+        vm.prank(address(retro));
+        ecoInspector.execTransaction({
+            to: address(launch),
             value: 0,
-            data: abi.encodeWithSelector(IERC20.transfer.selector, recipient, 100e18),
+            data: launchCall,
             operation: Enum.Operation.Call,
             safeTxGas: 0,
             baseGas: 0,
             gasPrice: 0,
             gasToken: address(0),
             refundReceiver: payable(address(0)),
-            signatures: signatures
+            signatures: abi.encodePacked(bytes32(uint256(uint160(address(retro)))), bytes32(""), uint8(1))
         });
 
         assertEqDecimal(usds.balanceOf(recipient), 100e18, 18);
-    }
-
-    // keccak256("SafeMessage(bytes message)");
-    bytes32 private constant SAFE_MSG_TYPEHASH = 0x60b3cbf8b4a223d68d641b3b6ddf9a298e7f33710cf3d3a9d1146b5a6150fbca;
-
-    function encodeMessageDataForSafe(ISafe safe, bytes memory message) public view returns (bytes memory) {
-        bytes32 safeMessageHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(message)));
-        return abi.encodePacked(bytes1(0x19), bytes1(0x01), safe.domainSeparator(), safeMessageHash);
     }
 }
