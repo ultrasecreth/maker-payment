@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {StdAssertions} from "forge-std/StdAssertions.sol";
 import {console} from "forge-std/console.sol";
 
+import {Address} from "openzeppelin/contracts/utils/Address.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ISafe} from "../src/dependencies/ISafe.sol";
@@ -12,6 +13,8 @@ import {Enum} from "../src/dependencies/Enum.sol";
 import {IMultiSend} from "../src/dependencies/IMultiSend.sol";
 
 contract MakePayments is Script, StdAssertions {
+    using Address for address;
+
     ISafe launch = ISafe(0x3C5142F28567E6a0F172fd0BaaF1f2847f49D02F);
     ISafe integration = ISafe(0xD6891d1DFFDA6B0B1aF3524018a1eE2E608785F7);
 
@@ -49,7 +52,7 @@ contract MakePayments is Script, StdAssertions {
             _nonce: nonce
         });
 
-        console.log("Please approve this dataHash");
+        console.log("Please approve this dataHash on one of the parent safes");
         console.logBytes32(dataHash);
 
         // Comment out when running for real
@@ -79,20 +82,42 @@ contract MakePayments is Script, StdAssertions {
             )
         );
 
+        bytes memory parentCall = abi.encodeCall(
+            ISafe.execTransaction,
+            (
+                address(launch),
+                0,
+                launchCall,
+                Enum.Operation.Call,
+                0,
+                0,
+                0,
+                address(0),
+                payable(address(0)),
+                abi.encodePacked(bytes32(uint256(uint160(address(retro)))), bytes32(""), uint8(1))
+            )
+        );
+
+        console.log("");
+
+        console.log("Please execute this call on the other parent safe");
+        console.logBytes(parentCall);
+
         vm.prank(address(retro));
         // vm.broadcast();
-        ecoInspector.execTransaction({
-            to: address(launch),
-            value: 0,
-            data: launchCall,
-            operation: Enum.Operation.Call,
-            safeTxGas: 0,
-            baseGas: 0,
-            gasPrice: 0,
-            gasToken: address(0),
-            refundReceiver: payable(address(0)),
-            signatures: abi.encodePacked(bytes32(uint256(uint160(address(retro)))), bytes32(""), uint8(1))
-        });
+        // ecoInspector.execTransaction({
+        //     to: address(launch),
+        //     value: 0,
+        //     data: launchCall,
+        //     operation: Enum.Operation.Call,
+        //     safeTxGas: 0,
+        //     baseGas: 0,
+        //     gasPrice: 0,
+        //     gasToken: address(0),
+        //     refundReceiver: payable(address(0)),
+        //     signatures: abi.encodePacked(bytes32(uint256(uint160(address(retro)))), bytes32(""), uint8(1))
+        // });
+        address(ecoInspector).functionCall(parentCall);
 
         for (uint256 i = 0; i < payments.length; i++) {
             assertGe(IERC20(payments[i].token).balanceOf(payments[i].recipient), payments[i].amount);
